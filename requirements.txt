@@ -4,7 +4,7 @@ requests>=2.25.0
 beautifulsoup4>=4.9.0
 selenium>=4.0.0
 scikit-learn>=0.24.0
-tensorflow>=2.16.0
+tensorflow==2.21.*  # 모델 직렬화 호환성: 학습에 사용한 버전과 일치해야 함
 matplotlib>=3.4.0
 kiwipiepy>=0.17.0
 gradio>=4.0.0
