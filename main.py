@@ -1,17 +1,13 @@
 import os
 import sys
 import argparse
-import pandas as pd
-
-from src.crawler import MusinsaCrawler
-from src.analyzer import SentimentModel
-from src.visualization import Visualizer
-from src.pipeline import AnalysisPipeline
 
 def run_train(args):
     """
     Trains the sentiment model from scratch.
     """
+    from src.analyzer import SentimentModel
+
     print("=========================================")
     print("      Sentiment Model Training Mode      ")
     print("=========================================")
@@ -23,10 +19,16 @@ def run_analyze(args):
     """
     Runs the crawler and sentiment analysis pipeline.
     """
+    import pandas as pd
+    from src.crawler import MusinsaCrawler
+    from src.analyzer import SentimentModel
+    from src.visualization import Visualizer
+    from src.pipeline import AnalysisPipeline
+
     print("=========================================")
     print("      Integrated Analysis Pipeline       ")
     print("=========================================")
-    
+
     # Initialize components
     crawler = MusinsaCrawler(headless=not args.no_headless)
     model = SentimentModel(model_dir=args.model_dir)

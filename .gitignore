@@ -147,9 +147,7 @@ Icon?
 
 # Project specific data and models (Large binaries & run-time data)
 data/
-models/best_model.h5
-models/tokenizer.pickle
-models/ratings_total.txt
+models/
 *.csv
 *.jpg
 *.png

@@ -99,7 +99,7 @@ class AnalysisPipeline:
         # Exclude product, brand and morphs of those from word cloud / bar chart
         exception_list = [brand_name, product_name]
         try:
-            exception_list += self.model.mecab.nouns(brand_name) + self.model.mecab.nouns(product_name)
+            exception_list += self.model.tokenizer_ko.nouns(brand_name) + self.model.tokenizer_ko.nouns(product_name)
         except Exception:
             pass
         exception_list = list(set(exception_list))
