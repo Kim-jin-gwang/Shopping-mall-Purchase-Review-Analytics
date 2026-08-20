@@ -9,6 +9,7 @@ Gradio 기본 UI로도 간단히 테스트할 수 있다.
 import os
 import sys
 import json
+import math
 from collections import Counter
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,11 +42,45 @@ with open(os.path.join(BASE_DIR, "assets", "demo_samples.json"), encoding="utf-8
     DEMO_SAMPLES = json.load(f)
 
 
-def _top_keywords(noun_lists, exclude=()):
-    counter = Counter()
-    for nouns in noun_lists:
-        counter.update(n for n in nouns if len(n) > 1 and n not in exclude)
-    return [{"word": w, "count": c} for w, c in counter.most_common(TOP_KEYWORDS)]
+# 양쪽 감성에 고르게 등장해 판별력이 없는 일반 단어
+GENERIC_WORDS = {"구매", "제품", "상품", "물건", "사용", "생각", "주문", "가격", "배송", "그것", "이것", "정도", "때문",
+                 "같다", "있다", "진짜", "처음", "부분", "그렇다", "이렇다", "아니다"}
+
+
+def _discriminative_keywords(pos_docs, neg_docs):
+    """
+    단순 빈도가 아니라 '반대 감성 대비 얼마나 치우쳐 나오는가'(log-odds)로
+    키워드를 뽑는다. 양쪽에 다 나오는 일반 단어는 자동으로 탈락하고,
+    각 감성의 '이유'가 되는 단어가 상위로 올라온다.
+    문서 빈도(리뷰당 1회)를 사용해 한 리뷰의 반복 단어가 왜곡하지 않게 한다.
+    """
+    df_pos, df_neg = Counter(), Counter()
+    for doc in pos_docs:
+        df_pos.update(set(doc))
+    for doc in neg_docs:
+        df_neg.update(set(doc))
+
+    n_pos, n_neg = max(len(pos_docs), 1), max(len(neg_docs), 1)
+    min_df_pos = 2 if len(pos_docs) >= 20 else 1
+    min_df_neg = 2 if len(neg_docs) >= 20 else 1
+
+    pos_scored, neg_scored = [], []
+    for w in set(df_pos) | set(df_neg):
+        if len(w) < 2 or w in GENERIC_WORDS:
+            continue
+        p = (df_pos[w] + 0.5) / (n_pos + 1)
+        n = (df_neg[w] + 0.5) / (n_neg + 1)
+        log_odds = math.log(p / n)
+        if log_odds > 0 and df_pos[w] >= min_df_pos:
+            pos_scored.append((w, log_odds * math.log1p(df_pos[w]), df_pos[w], df_neg[w]))
+        elif log_odds < 0 and df_neg[w] >= min_df_neg:
+            neg_scored.append((w, -log_odds * math.log1p(df_neg[w]), df_neg[w], df_pos[w]))
+
+    def top(scored):
+        scored.sort(key=lambda x: -x[1])
+        return [{"word": w, "count": own, "other_count": other} for w, _, own, other in scored[:TOP_KEYWORDS]]
+
+    return top(pos_scored), top(neg_scored)
 
 
 def analyze(reviews_text: str):
@@ -57,7 +92,7 @@ def analyze(reviews_text: str):
 
     scores = model.predict_scores(reviews)
     items = []
-    pos_nouns, neg_nouns = [], []
+    pos_docs, neg_docs = [], []
     for r, s in zip(reviews, scores):
         positive = s > 0.5
         items.append({
@@ -66,17 +101,18 @@ def analyze(reviews_text: str):
             "label": "positive" if positive else "negative",
             "confidence": round((s if positive else 1 - s) * 100, 1),
         })
-        nouns = model.tokenizer_ko.nouns(r)
-        (pos_nouns if positive else neg_nouns).append(nouns)
+        words = model.tokenizer_ko.content_words(r)
+        (pos_docs if positive else neg_docs).append(words)
 
+    pos_keywords, neg_keywords = _discriminative_keywords(pos_docs, neg_docs)
     pos_count = sum(1 for i in items if i["label"] == "positive")
     return {
         "total": len(items),
         "positive_count": pos_count,
         "negative_count": len(items) - pos_count,
         "positive_ratio": round(pos_count / len(items) * 100, 1),
-        "positive_keywords": _top_keywords(pos_nouns),
-        "negative_keywords": _top_keywords(neg_nouns),
+        "positive_keywords": pos_keywords,
+        "negative_keywords": neg_keywords,
         "items": items,
     }
 

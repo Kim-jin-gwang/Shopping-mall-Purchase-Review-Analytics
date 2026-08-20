@@ -27,6 +27,17 @@ class KoreanTokenizer:
     def nouns(self, text: str) -> List[str]:
         return [t.form for t in self.kiwi.tokenize(text) if t.tag.startswith("NN")]
 
+    # 키워드 분석용 내용어 추출: 명사(NNG/NNP) + 형용사(VA) + 어근(XR).
+    # 감성의 '이유'는 명사보다 형용사(좋다/빠르다/늦다/작다)에 담기는 경우가 많다.
+    def content_words(self, text: str) -> List[str]:
+        words = []
+        for t in self.kiwi.tokenize(text):
+            if t.tag in ("NNG", "NNP", "XR"):
+                words.append(t.form)
+            elif t.tag == "VA":
+                words.append(t.form + "다")
+        return words
+
 
 class Vocabulary:
     """
