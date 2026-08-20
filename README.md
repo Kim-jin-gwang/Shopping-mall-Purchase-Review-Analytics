@@ -1,12 +1,51 @@
-# 🛍️ Shopping Mall Purchase Review Analytics (쇼핑몰 구매 리뷰 감성 분석 CLI)
+---
+title: Review Analytics
+emoji: 🛍️
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: 6.25.0
+app_file: app.py
+pinned: false
+---
 
+# 🛍️ Shopping Mall Purchase Review Analytics (쇼핑몰 구매 리뷰 감성 분석)
+
+> **🌐 Live Demo:** **[demo-gateway.trealight112.workers.dev/review-analytics](https://demo-gateway.trealight112.workers.dev/review-analytics/)** — 리뷰를 직접 입력해 감성 분석을 체험해보세요!  
 > **Project Date:** 2021.04.25 ~ 2021.05.30  
 > **Collaborators:** 양수빈, 장준상  
-> **Refactored to CLI & Modular Architecture:** 2026.06.26
+> **Refactored to CLI & Modular Architecture:** 2026.06.26  
+> **Modernized for Live Demo (Kiwi + Keras 3):** 2026.08.20
 
 기존 별점 시스템의 한계점을 극복하고 사용자의 구매 결정에 실질적인 도움을 주기 위해, 약 200,000개의 쇼핑몰 리뷰 데이터로 사전 학습된 **GRU(Gated Recurrent Unit)** 신경망 모델을 활용해 무신사 상품의 리뷰 데이터를 **감성 분석(Sentiment Analysis)**하여 상품별 최종 **긍정/부정 비율**과 **감정별 대표 키워드 시각화 차트**를 도식화하는 감성 분석 파이프라인 프로젝트입니다.
 
 Jupyter Notebook 환경에서 동작하던 기존 코드베이스를 **유지보수성 및 확장성을 극대화한 모듈식 Python CLI 프로그램**으로 리팩터링하였습니다.
+
+---
+
+## 🌐 라이브 데모 아키텍처
+
+정적 호스팅과 연산 서버를 분리한 2-티어 구조로 서비스합니다.
+
+```text
+[커스텀 프론트엔드]                          [백엔드 API]
+Cloudflare (demo-gateway/review-analytics/) ──▶ Hugging Face Spaces (Gradio API)
+리뷰 입력·샘플 세트 선택,                       app.py — GRU 감성분석 모델을
+긍정/부정 비율·키워드 차트,                     REST API로 노출 (CPU 추론)
+리뷰별 판정 결과
+```
+
+- **모델**: 네이버 쇼핑 리뷰 20만 건으로 학습한 GRU 이진 분류기 — **테스트 정확도 91.99%**
+- **프론트엔드**: [demo-gateway 저장소](https://github.com/Kim-jin-gwang/demo-gateway)의 `review-analytics/` — 브라우저에서 `@gradio/client`로 API 호출
+- **백엔드**: 이 저장소의 `app.py` → HF Space `kimjgwang/review-analytics`
+- **로컬 실행**: `python main.py train`으로 모델 학습 후 `python app.py` → http://localhost:7860
+
+### 데모를 위한 현대화 리팩터링 (2026.08)
+| 변경 전 | 변경 후 | 이유 |
+|---|---|---|
+| `eunjeon` (Mecab) | `kiwipiepy` (Kiwi) | Windows/Linux 어디서나 순수 pip 설치 — 배포 가능성 확보 |
+| Keras `Tokenizer` + `tokenizer.pickle` | 자체 `Vocabulary` + `vocab.json` | Keras 3에서 제거된 레거시 API 탈피, 버전 독립적 직렬화 |
+| 리뷰 1건씩 추론 | 배치 추론 (`predict_scores`) | 리뷰 수백 건 분석 속도 대폭 개선 |
 
 ---
 
@@ -31,11 +70,17 @@ Shopping-mall-Purchase-Review-Analytics/
 │   └── pipeline.py             # 전체 파이프라인 (AnalysisPipeline)
 │
 ├── main.py                     # CLI 애플리케이션 진입점
+├── app.py                      # 라이브 데모용 Gradio API 서버 (HF Spaces 배포)
+├── scripts/
+│   └── prepare_demo_samples.py # 데모용 샘플 리뷰 세트 생성 스크립트
+├── assets/
+│   └── demo_samples.json       # 데모용 샘플 리뷰 세트 (긍/부정 비율별 3종)
+├── docs/                       # 발표 자료 등 문서
 ├── requirements.txt            # 의존성 목록
 ├── README.md                   # 프로젝트 상세 가이드
 │
-# 실행 시 자동 생성되는 디렉토리
-├── models/                     # 학습된 모델 및 토크나이저 저장 디렉토리
+# 실행 시 자동 생성되는 디렉토리 (git 미추적)
+├── models/                     # 학습된 모델(best_model.h5)과 어휘 사전(vocab.json)
 └── data/                       # 크롤링한 데이터 및 이미지 저장 디렉토리
 ```
 
@@ -60,8 +105,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> ⚠️ **주의사항 (Windows 환경):** 
-> 한국어 형태소 분석기인 KoNLPy의 Mecab 모듈을 사용하기 위해 Windows 운영체제에서는 `eunjeon` 패키지가 필수적입니다. (`requirements.txt`에 포함되어 있습니다.)
+> ✅ **형태소 분석기:** 한국어 토큰화에 [Kiwi](https://github.com/bab2min/kiwipiepy)(`kiwipiepy`)를 사용합니다. 순수 pip 패키지라 Windows/macOS/Linux 어디서나 별도 설정 없이 설치됩니다. (과거 사용하던 `eunjeon`/Mecab은 설치 문제로 교체)
 
 ---
 
@@ -70,7 +114,7 @@ pip install -r requirements.txt
 `main.py` 진입점을 통해 모델 학습 및 크롤링/감성 분석 작업을 수행할 수 있습니다.
 
 ### **1. 감성 분석 GRU 모델 학습**
-네이버 쇼핑 200,000개 리뷰 데이터를 자동으로 다운로드하여 모델을 처음부터 새로 학습시키고 `models/` 폴더에 체크포인트(`best_model.h5`)와 토크나이저(`tokenizer.pickle`)를 저장합니다.
+네이버 쇼핑 200,000개 리뷰 데이터를 자동으로 다운로드하여 모델을 처음부터 새로 학습시키고 `models/` 폴더에 체크포인트(`best_model.h5`)와 어휘 사전(`vocab.json`)을 저장합니다. (테스트 정확도 약 92%)
 *(최초 1회 실행 필요, 이미 학습된 파일이 `models/`에 있으면 생략 가능)*
 
 ```bash
@@ -126,7 +170,7 @@ python main.py analyze --keyword "데님" --limit 100
 본 프로젝트는 다른 쇼핑몰로의 크롤러 이식을 극대화할 수 있도록 설계되었습니다.
 
 ### **새로운 쇼핑몰 크롤러 추가하기**
-1. `src/crawler/base.py`에 선언된 [BaseCrawler](file:///C:/Users/SSAFY/Desktop/gitgitgit/Shopping-mall-Purchase-Review-Analytics/src/crawler/base.py) 추상 클래스를 상속받습니다.
+1. `src/crawler/base.py`에 선언된 [BaseCrawler](src/crawler/base.py) 추상 클래스를 상속받습니다.
 2. `search_products`, `crawl_reviews`, `download_product_image` 메소드를 각 쇼핑몰의 HTML/API 구조에 맞게 구현합니다.
 3. 예시:
 ```python
