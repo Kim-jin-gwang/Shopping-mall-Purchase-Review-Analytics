@@ -92,6 +92,14 @@ Shopping-mall-Purchase-Review-Analytics/
 
 ## 🚀 설치 및 사용 방법
 
+### **0. 도커로 실행 (권장 — 학습 환경 그대로 재현)**
+모델 역직렬화는 학습 당시 버전(TF 2.21 / Python 3.12)에 민감한데, 도커 이미지가 이를 그대로 고정합니다. 학습된 모델은 기동 시 HF Space 저장소에서 자동으로 받아옵니다.
+```bash
+docker build -t review-analytics .
+docker run -p 7860:7860 review-analytics
+```
+→ http://localhost:7860 에서 Gradio API/데모가 열립니다.
+
 ### **1. 가상환경 구축 및 필수 라이브러리 설치**
 의존성 충돌을 방지하기 위해 가상환경을 생성하고 패키지를 설치하는 것을 권장합니다.
 
