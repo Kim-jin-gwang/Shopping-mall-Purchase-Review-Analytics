@@ -80,6 +80,9 @@ Shopping-mall-Purchase-Review-Analytics/
 ├── assets/
 │   └── demo_samples.json       # 데모용 샘플 리뷰 세트 (긍/부정 비율별 3종)
 ├── docs/                       # 발표 자료 등 문서
+├── Dockerfile                  # 학습 환경(TF 2.21/py3.12) 고정 도커 이미지
+├── docker/
+│   └── fetch_models.py         # 컨테이너 기동 시 HF에서 학습 모델 자동 다운로드
 ├── requirements.txt            # 의존성 목록
 ├── README.md                   # 프로젝트 상세 가이드
 │
