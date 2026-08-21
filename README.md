@@ -31,12 +31,15 @@ Jupyter Notebook 환경에서 동작하던 기존 코드베이스를 **유지보
 ```text
 [커스텀 프론트엔드]                          [백엔드 API]
 Cloudflare (demo-gateway/review-analytics/) ──▶ Hugging Face Spaces (Gradio API)
-리뷰 입력·샘플 세트 선택,                       app.py — GRU 감성분석 모델을
-긍정/부정 비율·키워드 차트,                     REST API로 노출 (CPU 추론)
-리뷰별 판정 결과
+리뷰 입력·샘플 세트·CSV 업로드,                 app.py — GRU 감성분석 모델을
+긍정/중립/부정 비율·확신도 분포,                REST API로 노출 (CPU 추론)
+키워드 클릭 → 근거 리뷰 필터·하이라이트,        문장 단위 배치 추론
+문장 단위 감성 색칠
 ```
 
 - **모델**: 네이버 쇼핑 리뷰 20만 건으로 학습한 GRU 이진 분류기 — **테스트 정확도 91.99%**
+- **문장 단위 감성 분석 (2026.08)**: 리뷰를 문장으로 분리해 각각 추론합니다. "옷은 예쁜데 배송이 늦어요"처럼 긍·부정이 섞인 리뷰에서도 각 감성의 근거 키워드가 정확히 추출되며, 데모에서 문장별 감성이 색으로 표시됩니다.
+- **판단 유보(중립) 구간**: 긍정 확률 0.4~0.6 리뷰는 무리하게 판정하지 않고 중립으로 분류 — 모델 확신도 분포 히스토그램과 함께 제공합니다.
 - **프론트엔드**: [demo-gateway 저장소](https://github.com/Kim-jin-gwang/demo-gateway)의 `review-analytics/` — 브라우저에서 `@gradio/client`로 API 호출
 - **백엔드**: 이 저장소의 `app.py` → HF Space `kimjgwang/review-analytics`
 - **로컬 실행**: `python main.py train`으로 모델 학습 후 `python app.py` → http://localhost:7860
