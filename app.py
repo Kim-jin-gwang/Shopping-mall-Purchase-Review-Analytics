@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import math
+import re
 from collections import Counter
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +34,15 @@ from src.analyzer import SentimentModel
 
 MAX_REVIEWS = 200          # 데모 서버 보호: 한 번에 분석할 최대 리뷰 수
 TOP_KEYWORDS = 10
+NEUTRAL_LOW, NEUTRAL_HIGH = 0.4, 0.6   # 이 구간은 '판단 유보(중립)'로 분류
+
+# 마침표 없이 이어지는 한국어 리뷰 대응: 종결부호 뒤 + ㅠ/ㅜ 뒤 공백에서 분리
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?…~])\s+|(?<=[ㅠㅜ])\s+(?=[가-힣A-Za-z0-9])")
+
+
+def _split_sentences(text: str):
+    parts = [p.strip() for p in _SENTENCE_SPLIT.split(text) if p and p.strip()]
+    return parts or [text]
 
 model = SentimentModel(model_dir=os.path.join(BASE_DIR, "models"))
 if not model.load():
@@ -52,7 +62,7 @@ def _discriminative_keywords(pos_docs, neg_docs):
     단순 빈도가 아니라 '반대 감성 대비 얼마나 치우쳐 나오는가'(log-odds)로
     키워드를 뽑는다. 양쪽에 다 나오는 일반 단어는 자동으로 탈락하고,
     각 감성의 '이유'가 되는 단어가 상위로 올라온다.
-    문서 빈도(리뷰당 1회)를 사용해 한 리뷰의 반복 단어가 왜곡하지 않게 한다.
+    문서 빈도(감성 판정된 문장당 1회)를 사용해 반복 단어가 왜곡하지 않게 한다.
     """
     df_pos, df_neg = Counter(), Counter()
     for doc in pos_docs:
@@ -84,32 +94,66 @@ def _discriminative_keywords(pos_docs, neg_docs):
 
 
 def analyze(reviews_text: str):
-    """줄바꿈으로 구분된 리뷰들을 감성 분석해 JSON으로 반환."""
+    """줄바꿈으로 구분된 리뷰들을 감성 분석해 JSON으로 반환.
+
+    리뷰 단위 판정과 별개로, 키워드는 '문장' 단위 감성으로 추출한다.
+    혼합 감성 리뷰(예: "작아서 아쉬워요 ... 그래도 옷은 예뻐요")에서
+    긍정으로 뭉뚱그려져 부정 근거 단어가 사라지는 문제를 막기 위함이다.
+    """
     reviews = [r.strip() for r in (reviews_text or "").splitlines() if r.strip()]
     if not reviews:
         raise gr.Error("분석할 리뷰를 한 줄에 하나씩 입력해주세요.")
     reviews = reviews[:MAX_REVIEWS]
 
-    scores = model.predict_scores(reviews)
+    review_scores = model.predict_scores(reviews)
+
+    # 문장 분리 후 전체 문장을 한 번에 배치 추론
+    sent_lists = [_split_sentences(r) for r in reviews]
+    flat_sentences = [s for sents in sent_lists for s in sents]
+    flat_scores = model.predict_scores(flat_sentences)
+
     items = []
     pos_docs, neg_docs = [], []
-    for r, s in zip(reviews, scores):
-        positive = s > 0.5
+    cursor = 0
+    for r, s, sents in zip(reviews, review_scores, sent_lists):
+        sent_scores = flat_scores[cursor:cursor + len(sents)]
+        cursor += len(sents)
+
+        # 키워드 문서는 문장 감성 기준으로 적립 (중립 문장은 어느 쪽에도 기여하지 않음)
+        review_words = []
+        sentence_items = []
+        for sent, ss in zip(sents, sent_scores):
+            words = model.tokenizer_ko.content_words(sent)
+            review_words.extend(words)
+            sentence_items.append({"text": sent, "score": round(ss, 4)})
+            if ss > NEUTRAL_HIGH:
+                pos_docs.append(words)
+            elif ss < NEUTRAL_LOW:
+                neg_docs.append(words)
+
+        if s > NEUTRAL_HIGH:
+            label = "positive"
+        elif s < NEUTRAL_LOW:
+            label = "negative"
+        else:
+            label = "neutral"
         items.append({
             "review": r,
             "score": round(s, 4),                      # 긍정 확률 (0~1)
-            "label": "positive" if positive else "negative",
-            "confidence": round((s if positive else 1 - s) * 100, 1),
+            "label": label,
+            "confidence": round(max(s, 1 - s) * 100, 1),
+            "words": sorted(set(review_words)),        # 키워드 매칭용 내용어
+            "sentences": sentence_items,               # 문장별 감성 (혼합 리뷰 시각화용)
         })
-        words = model.tokenizer_ko.content_words(r)
-        (pos_docs if positive else neg_docs).append(words)
 
     pos_keywords, neg_keywords = _discriminative_keywords(pos_docs, neg_docs)
     pos_count = sum(1 for i in items if i["label"] == "positive")
+    neg_count = sum(1 for i in items if i["label"] == "negative")
     return {
         "total": len(items),
         "positive_count": pos_count,
-        "negative_count": len(items) - pos_count,
+        "negative_count": neg_count,
+        "neutral_count": len(items) - pos_count - neg_count,
         "positive_ratio": round(pos_count / len(items) * 100, 1),
         "positive_keywords": pos_keywords,
         "negative_keywords": neg_keywords,
